@@ -43,8 +43,10 @@ namespace AutoHole
                 .OfType<Duct>()
                 .ToList();
 
-
-
+            List<Pipe> pipes = new FilteredElementCollector(ovDoc)
+                .OfClass(typeof(Pipe))
+                .OfType<Pipe>()
+                .ToList();
 
             View3D view3D = new FilteredElementCollector(arDoc)
                 .OfClass(typeof(View3D))
@@ -90,6 +92,32 @@ namespace AutoHole
                     height.Set(d.Diameter);
                 }
             }
+            foreach (Pipe pipe in pipes)
+            {
+                Line curve = (pipe.Location as LocationCurve).Curve as Line;
+                XYZ point = curve.GetEndPoint(0);
+                XYZ direction = curve.Direction;
+                List<ReferenceWithContext> intersections = referenceIntersector.Find(point, direction)
+                    .Where(x => x.Proximity <= curve.Length)
+                    .Distinct(new ReferenceWithContextElementEqualityComparer())
+                    .ToList();
+
+                foreach (ReferenceWithContext refer in intersections)
+                {
+                    double proximity = refer.Proximity;
+                    Reference reference = refer.GetReference();
+                    Wall wall = arDoc.GetElement(reference.ElementId) as Wall;
+                    Level level = arDoc.GetElement(wall.LevelId) as Level;
+                    XYZ pointHole = point + (direction * proximity);
+
+                    FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, familySymbol, wall, level, StructuralType.NonStructural);
+                    Parameter width = hole.LookupParameter("Ширина");
+                    Parameter height = hole.LookupParameter("Высота");
+                    width.Set(pipe.Diameter);
+                    height.Set(pipe.Diameter);
+                }
+            }
+
             transaction.Commit();
             return Result.Succeeded;
         }
